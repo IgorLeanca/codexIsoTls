@@ -9,16 +9,13 @@ import java.net.Socket;
 public class Iso8583Sender {
     private static final String HOST = "hostigor";
     private static final int PORT = 8056;
+    // Replace the value below with the ISO 8583 message to send, encoded as hexadecimal characters.
+    private static final String HEX_MESSAGE =
+            "3030303030303030303030303030303030303030303030303030303030303030";
 
     public static void main(String[] args) {
-        if (args.length == 0) {
-            System.err.println("Usage: java Iso8583Sender <hex-message>");
-            System.exit(1);
-        }
-
-        String hexMessage = String.join("", args);
         try {
-            byte[] messageBytes = hexToBytes(hexMessage);
+            byte[] messageBytes = hexToBytes(HEX_MESSAGE);
             sendMessage(messageBytes);
         } catch (IllegalArgumentException e) {
             System.err.println("Invalid hex message: " + e.getMessage());
@@ -36,6 +33,9 @@ public class Iso8583Sender {
         try (Socket s = socket;
              OutputStream out = new BufferedOutputStream(s.getOutputStream());
              InputStream in = new BufferedInputStream(s.getInputStream())) {
+
+            System.out.println("Sending " + messageBytes.length + " bytes:");
+            System.out.println(bytesToHex(messageBytes, messageBytes.length));
 
             out.write(messageBytes);
             out.flush();

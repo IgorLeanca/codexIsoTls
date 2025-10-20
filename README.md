@@ -14,16 +14,12 @@ javac src/Iso8583Sender.java
 
 ## Running
 
-Pass the ISO 8583 payload as a hexadecimal string. Whitespace is ignored and may be used for readability.
+The ISO 8583 message is defined in `Iso8583Sender.HEX_MESSAGE`. Edit the constant to match the hexadecimal payload that should be transmitted.
+
+After adjusting the constant if necessary, run the program:
 
 ```
-java -cp src Iso8583Sender <hex-message>
-```
-
-Example:
-
-```
-java -cp src Iso8583Sender "6000400004A0200000000000000000011234567890ABCDEF"
+java -cp src Iso8583Sender
 ```
 
 The program connects to `hostigor:8056`, sends the decoded bytes, and prints any response as a hexadecimal string.
