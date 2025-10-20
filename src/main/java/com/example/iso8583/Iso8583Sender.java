@@ -57,7 +57,9 @@ public class Iso8583Sender {
 
     public static void main(String[] args) {
         try {
+            System.out.println("Step 1: Preparing ISO 8583 payload from configured hex string.");
             byte[] messageBytes = hexToBytes(HEX_MESSAGE);
+            System.out.println("Hex payload length: " + messageBytes.length + " bytes.");
             sendMessage(messageBytes);
         } catch (IllegalArgumentException e) {
             System.err.println("Invalid hex message: " + e.getMessage());
@@ -69,6 +71,7 @@ public class Iso8583Sender {
     }
 
     private static void sendMessage(byte[] messageBytes) throws IOException {
+        System.out.println("Step 2: Establishing TLS connection to " + HOST + ":" + PORT + ".");
         try (SSLSocket socket = createSslSocket();
              OutputStream out = new BufferedOutputStream(socket.getOutputStream());
              InputStream in = new BufferedInputStream(socket.getInputStream())) {
@@ -76,18 +79,19 @@ public class Iso8583Sender {
             SSLSession session = socket.getSession();
             System.out.println("Connected using " + session.getProtocol() + " / " + session.getCipherSuite());
 
-            System.out.println("Sending " + messageBytes.length + " bytes:");
+            System.out.println("Step 3: Sending " + messageBytes.length + " bytes to host.");
             System.out.println(bytesToHex(messageBytes, messageBytes.length));
 
             out.write(messageBytes);
             out.flush();
 
+            System.out.println("Step 4: Waiting for host response.");
             byte[] buffer = new byte[1024];
             int read = in.read(buffer);
             if (read == -1) {
-                System.out.println("No response received.");
+                System.out.println("Step 5: No response received before the connection closed.");
             } else {
-                System.out.println("Received " + read + " bytes:");
+                System.out.println("Step 5: Received " + read + " bytes from host.");
                 System.out.println(bytesToHex(buffer, read));
             }
         }
