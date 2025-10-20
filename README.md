@@ -9,6 +9,8 @@ This repository contains a minimal Java 8 application that sends an ISO 8583 mes
 
 ## Building
 
+### Option 1: Using Maven
+
 Build the runnable JAR with Maven:
 
 ```
@@ -16,6 +18,18 @@ mvn -DskipTests package
 ```
 
 The compiled artifact will be placed at `target/iso8583-sender-1.0-SNAPSHOT.jar`.
+
+### Option 2: Using the bundled script (no Maven downloads)
+
+If the server does not have internet access for Maven to download plugins, you can still build the
+JAR using the provided helper script:
+
+```
+./build-jar.sh
+```
+
+This compiles the sources with `javac` and assembles `target/iso8583-sender-manual.jar`, which can
+be copied straight to a Linux server and executed with `java -jar`.
 
 ## Running
 
