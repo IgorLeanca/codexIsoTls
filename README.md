@@ -5,21 +5,32 @@ This repository contains a minimal Java 8 application that sends an ISO 8583 mes
 ## Prerequisites
 
 - Java 8 JDK
+- Apache Maven 3.6+
 
 ## Building
 
+Build the runnable JAR with Maven:
+
 ```
-javac src/Iso8583Sender.java
+mvn -DskipTests package
 ```
+
+The compiled artifact will be placed at `target/iso8583-sender-1.0-SNAPSHOT.jar`.
 
 ## Running
 
-The ISO 8583 message is defined in `Iso8583Sender.HEX_MESSAGE`. Edit the constant to match the hexadecimal payload that should be transmitted.
+The ISO 8583 message is defined in `src/main/java/com/example/iso8583/Iso8583Sender.java` as the `HEX_MESSAGE` constant. Edit the constant to match the hexadecimal payload that should be transmitted.
 
-After adjusting the constant if necessary, run the program:
+After adjusting the constant if necessary, run the program either from the packaged JAR:
 
 ```
-java -cp src Iso8583Sender
+java -jar target/iso8583-sender-1.0-SNAPSHOT.jar
+```
+
+or directly from the sources using Maven:
+
+```
+mvn exec:java
 ```
 
 The program establishes a TLS session with `hostigor:8056`, sends the decoded bytes, and prints any response as a hexadecimal string.
@@ -31,5 +42,5 @@ The program establishes a TLS session with `hostigor:8056`, sends the decoded by
 If you prefer to supply a separate trust store file, you can still run the program with the standard JVM options, for example:
 
 ```
-java -Djavax.net.ssl.trustStore=/path/to/keystore -Djavax.net.ssl.trustStorePassword=changeit -cp src Iso8583Sender
+java -Djavax.net.ssl.trustStore=/path/to/keystore -Djavax.net.ssl.trustStorePassword=changeit -jar target/iso8583-sender-1.0-SNAPSHOT.jar
 ```
