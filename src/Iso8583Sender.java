@@ -3,8 +3,16 @@ import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.InetSocketAddress;
-import java.net.Socket;
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 public class Iso8583Sender {
     private static final String HOST = "hostigor";
@@ -12,6 +20,13 @@ public class Iso8583Sender {
     // Replace the value below with the ISO 8583 message to send, encoded as hexadecimal characters.
     private static final String HEX_MESSAGE =
             "3030303030303030303030303030303030303030303030303030303030303030";
+
+    /**
+     * When set to {@code true}, the client will trust every server certificate without validation.
+     * This is insecure and should only be used in controlled environments where the server's
+     * identity is already known.
+     */
+    private static final boolean TRUST_ALL_CERTIFICATES = true;
 
     public static void main(String[] args) {
         try {
@@ -27,12 +42,12 @@ public class Iso8583Sender {
     }
 
     private static void sendMessage(byte[] messageBytes) throws IOException {
-        Socket socket = new Socket();
-        socket.connect(new InetSocketAddress(HOST, PORT));
+        try (SSLSocket socket = createSslSocket();
+             OutputStream out = new BufferedOutputStream(socket.getOutputStream());
+             InputStream in = new BufferedInputStream(socket.getInputStream())) {
 
-        try (Socket s = socket;
-             OutputStream out = new BufferedOutputStream(s.getOutputStream());
-             InputStream in = new BufferedInputStream(s.getInputStream())) {
+            SSLSession session = socket.getSession();
+            System.out.println("Connected using " + session.getProtocol() + " / " + session.getCipherSuite());
 
             System.out.println("Sending " + messageBytes.length + " bytes:");
             System.out.println(bytesToHex(messageBytes, messageBytes.length));
@@ -49,6 +64,28 @@ public class Iso8583Sender {
                 System.out.println(bytesToHex(buffer, read));
             }
         }
+    }
+
+    private static SSLSocket createSslSocket() throws IOException {
+        try {
+            SSLSocketFactory factory = createSslSocketFactory();
+            SSLSocket socket = (SSLSocket) factory.createSocket(HOST, PORT);
+            socket.startHandshake();
+            return socket;
+        } catch (GeneralSecurityException e) {
+            throw new IOException("Unable to initialize SSL context", e);
+        }
+    }
+
+    private static SSLSocketFactory createSslSocketFactory() throws GeneralSecurityException {
+        if (!TRUST_ALL_CERTIFICATES) {
+            return (SSLSocketFactory) SSLSocketFactory.getDefault();
+        }
+
+        SSLContext context = SSLContext.getInstance("TLS");
+        TrustManager[] trustManagers = new TrustManager[]{new TrustAllCertificatesManager()};
+        context.init(null, trustManagers, new SecureRandom());
+        return context.getSocketFactory();
     }
 
     private static byte[] hexToBytes(String hex) {
@@ -78,5 +115,22 @@ public class Iso8583Sender {
             sb.append(String.format("%02X", bytes[i] & 0xFF));
         }
         return sb.toString();
+    }
+
+    private static final class TrustAllCertificatesManager implements X509TrustManager {
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType) {
+            // Intentionally left blank: all client certificates are trusted.
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType) {
+            // Intentionally left blank: all server certificates are trusted.
+        }
+
+        @Override
+        public X509Certificate[] getAcceptedIssuers() {
+            return new X509Certificate[0];
+        }
     }
 }
