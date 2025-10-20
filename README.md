@@ -55,7 +55,9 @@ The program establishes a TLS session with `hostigor:8056`, sends the decoded by
 
 ### Trusting the server certificate
 
-`Iso8583Sender` contains a `CUSTOM_CA_CERT_PEM` constant that holds the PEM-encoded certificate authority (CA) or server certificate the client should trust. Replace the sample SecureTrust CA contents with your own PEM certificate if necessary. When the constant is left empty, the JVM's default trust store is used instead.
+`Iso8583Sender` contains a `CUSTOM_CA_CERT_PATH` constant that points to a PEM-encoded certificate authority (CA) or server certificate file the client should trust. Set the constant to the absolute or relative path of your certificate file (for example, `certs/securetrust.pem`). When the constant is left empty, the JVM's default trust store is used instead.
+
+The certificate file can contain either the issuing CA or the specific server certificate. Only one certificate is loaded from the file; if you need to trust multiple certificates, convert them into a Java KeyStore and launch the program with the standard JVM options.
 
 If you prefer to supply a separate trust store file, you can still run the program with the standard JVM options, for example:
 
