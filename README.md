@@ -22,4 +22,14 @@ After adjusting the constant if necessary, run the program:
 java -cp src Iso8583Sender
 ```
 
-The program establishes a TLS session with `hostigor:8056`, sends the decoded bytes, and prints any response as a hexadecimal string. By default the client trusts every certificate it encounters so that it can connect to servers using self-signed or private CA certificates. For production usage update `Iso8583Sender.TRUST_ALL_CERTIFICATES` to `false` and provide an appropriate trust store (for example via the standard `javax.net.ssl.trustStore` system properties).
+The program establishes a TLS session with `hostigor:8056`, sends the decoded bytes, and prints any response as a hexadecimal string.
+
+### Trusting the server certificate
+
+`Iso8583Sender` contains a `CUSTOM_CA_CERT_PEM` constant that holds the PEM-encoded certificate authority (CA) or server certificate the client should trust. Replace the sample SecureTrust CA contents with your own PEM certificate if necessary. When the constant is left empty, the JVM's default trust store is used instead.
+
+If you prefer to supply a separate trust store file, you can still run the program with the standard JVM options, for example:
+
+```
+java -Djavax.net.ssl.trustStore=/path/to/keystore -Djavax.net.ssl.trustStorePassword=changeit -cp src Iso8583Sender
+```
