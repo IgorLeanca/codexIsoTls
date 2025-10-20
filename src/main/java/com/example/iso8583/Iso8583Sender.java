@@ -2,9 +2,11 @@ package com.example.iso8583;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -13,6 +15,8 @@ import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.Collection;
+import java.util.List;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSession;
@@ -28,11 +32,10 @@ public class Iso8583Sender {
             "3030303030303030303030303030303030303030303030303030303030303030";
 
     /**
-     * Path to a PEM-encoded certificate authority (CA) or server certificate that should be trusted.
-     * Provide an absolute or relative path to the certificate file. Leave the string empty to use the
-     * default JVM trust store instead.
+     * Path to a UTF-8 text file that contains one or more PEM-encoded certificates that should be
+     * trusted. Leave the string empty to use the default JVM trust store instead.
      */
-    private static final String CUSTOM_CA_CERT_PATH = "";
+    private static final String CUSTOM_CA_CERTIFICATE_LIST_PATH = "certificates.txt";
 
     /**
      * Some TLS servers immediately drop the connection when they see an unsupported protocol such as
@@ -99,7 +102,7 @@ public class Iso8583Sender {
     }
 
     private static SSLSocketFactory createSslSocketFactory() throws GeneralSecurityException, IOException {
-        if (CUSTOM_CA_CERT_PATH.trim().isEmpty()) {
+        if (CUSTOM_CA_CERTIFICATE_LIST_PATH.trim().isEmpty()) {
             return (SSLSocketFactory) SSLSocketFactory.getDefault();
         }
 
@@ -110,15 +113,44 @@ public class Iso8583Sender {
         keyStore.load(null, null);
 
         CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
-        Path certificatePath = Paths.get(CUSTOM_CA_CERT_PATH);
-        if (!Files.exists(certificatePath)) {
-            throw new IOException("Custom CA certificate file not found: " + CUSTOM_CA_CERT_PATH);
+        Path certificateListPath = Paths.get(CUSTOM_CA_CERTIFICATE_LIST_PATH);
+        if (!Files.exists(certificateListPath)) {
+            throw new IOException(
+                    "Custom CA certificate list not found: " + CUSTOM_CA_CERTIFICATE_LIST_PATH);
         }
 
-        try (InputStream certStream = Files.newInputStream(certificatePath)) {
-            X509Certificate certificate =
-                    (X509Certificate) certificateFactory.generateCertificate(certStream);
-            keyStore.setCertificateEntry("custom-ca", certificate);
+        System.out.println("Loading custom certificates from " + CUSTOM_CA_CERTIFICATE_LIST_PATH + ".");
+
+        List<String> lines = Files.readAllLines(certificateListPath, StandardCharsets.UTF_8);
+        StringBuilder normalizedCertificates = new StringBuilder();
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+                continue;
+            }
+            normalizedCertificates.append(trimmed).append('\n');
+        }
+
+        byte[] rawCertificates = normalizedCertificates.toString().getBytes(StandardCharsets.UTF_8);
+        if (rawCertificates.length == 0) {
+            throw new IOException("Custom CA certificate list is empty: "
+                    + CUSTOM_CA_CERTIFICATE_LIST_PATH);
+        }
+
+        int index = 0;
+        try (InputStream certStream = new ByteArrayInputStream(rawCertificates)) {
+            Collection<?> certificates = certificateFactory.generateCertificates(certStream);
+            for (Object certificate : certificates) {
+                if (certificate instanceof X509Certificate) {
+                    String alias = "custom-ca-" + index++;
+                    keyStore.setCertificateEntry(alias, (X509Certificate) certificate);
+                }
+            }
+        }
+
+        if (index == 0) {
+            throw new IOException("No certificates were found inside "
+                    + CUSTOM_CA_CERTIFICATE_LIST_PATH);
         }
 
         trustManagerFactory.init(keyStore);

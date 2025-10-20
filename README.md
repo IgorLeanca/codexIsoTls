@@ -39,6 +39,11 @@ If the remote endpoint only supports particular TLS protocol versions, adjust th
 constant in the same file (for example, set it to `{"TLSv1.2"}`) to avoid the server closing the
 connection during the handshake. Leaving the array empty retains the JVM defaults.
 
+Trusted certificates can be stored in the `certificates.txt` file in the project root. The
+application loads the PEM blocks listed in this file automatically when establishing the TLS
+connection. The repository ships with the SecureTrust CA certificate as an example entry—replace it
+with the certificate(s) issued for your environment.
+
 After adjusting the constant if necessary, run the program either from the packaged JAR:
 
 ```
@@ -55,11 +60,17 @@ The program establishes a TLS session with `hostigor:8056`, sends the decoded by
 
 ### Trusting the server certificate
 
-`Iso8583Sender` contains a `CUSTOM_CA_CERT_PATH` constant that points to a PEM-encoded certificate authority (CA) or server certificate file the client should trust. Set the constant to the absolute or relative path of your certificate file (for example, `certs/securetrust.pem`). When the constant is left empty, the JVM's default trust store is used instead.
+`Iso8583Sender` reads trusted certificates from the UTF-8 text file referenced by the
+`CUSTOM_CA_CERTIFICATE_LIST_PATH` constant (defaults to `certificates.txt`). Populate the file
+with one or more PEM blocks—multiple certificates can be included back-to-back. Lines starting with
+`#` are treated as comments and ignored.
 
-The certificate file can contain either the issuing CA or the specific server certificate. Only one certificate is loaded from the file; if you need to trust multiple certificates, convert them into a Java KeyStore and launch the program with the standard JVM options.
+When `CUSTOM_CA_CERTIFICATE_LIST_PATH` is set to an empty string, the JVM's default trust store is
+used instead of the bundled list. This is useful when the endpoint already chains to a well-known
+public CA.
 
-If you prefer to supply a separate trust store file, you can still run the program with the standard JVM options, for example:
+If you prefer to supply a separate trust store file, you can still run the program with the standard
+JVM options, for example:
 
 ```
 java -Djavax.net.ssl.trustStore=/path/to/keystore -Djavax.net.ssl.trustStorePassword=changeit -jar target/iso8583-sender-1.0-SNAPSHOT.jar
