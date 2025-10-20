@@ -35,6 +35,10 @@ be copied straight to a Linux server and executed with `java -jar`.
 
 The ISO 8583 message is defined in `src/main/java/com/example/iso8583/Iso8583Sender.java` as the `HEX_MESSAGE` constant. Edit the constant to match the hexadecimal payload that should be transmitted.
 
+If the remote endpoint only supports particular TLS protocol versions, adjust the `ENABLED_PROTOCOLS`
+constant in the same file (for example, set it to `{"TLSv1.2"}`) to avoid the server closing the
+connection during the handshake. Leaving the array empty retains the JVM defaults.
+
 After adjusting the constant if necessary, run the program either from the packaged JAR:
 
 ```

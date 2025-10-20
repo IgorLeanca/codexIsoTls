@@ -55,6 +55,14 @@ public class Iso8583Sender {
                     + "3ItHuuG51WLQoqD0ZwV4KWMabwTW+MZMo5qxN7SN5ShLHZ4swrhovO0C7jE=\n"
                     + "-----END CERTIFICATE-----\n";
 
+    /**
+     * Some TLS servers immediately drop the connection when they see an unsupported protocol such as
+     * TLS 1.3. Set {@link #ENABLED_PROTOCOLS} to the list of versions that the remote host supports to
+     * avoid the "Connection reset" error during the handshake. Leave the array empty to retain the
+     * JVM defaults.
+     */
+    private static final String[] ENABLED_PROTOCOLS = {"TLSv1.2"};
+
     public static void main(String[] args) {
         try {
             System.out.println("Step 1: Preparing ISO 8583 payload from configured hex string.");
@@ -101,6 +109,9 @@ public class Iso8583Sender {
         try {
             SSLSocketFactory factory = createSslSocketFactory();
             SSLSocket socket = (SSLSocket) factory.createSocket(HOST, PORT);
+            if (ENABLED_PROTOCOLS.length > 0) {
+                socket.setEnabledProtocols(ENABLED_PROTOCOLS);
+            }
             socket.startHandshake();
             return socket;
         } catch (GeneralSecurityException e) {
