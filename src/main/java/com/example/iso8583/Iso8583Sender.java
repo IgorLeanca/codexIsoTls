@@ -6,6 +6,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,6 +46,12 @@ public class Iso8583Sender {
      */
     private static final String[] ENABLED_PROTOCOLS = {"TLSv1.2"};
 
+    /**
+     * Maximum time to wait for the host to respond after sending the payload, in milliseconds. When
+     * the timeout elapses the program logs that no response was received and closes the connection.
+     */
+    private static final int RESPONSE_TIMEOUT_MILLIS = 10_000;
+
     public static void main(String[] args) {
         try {
             System.out.println("Step 1: Preparing ISO 8583 payload from configured hex string.");
@@ -69,6 +76,8 @@ public class Iso8583Sender {
             SSLSession session = socket.getSession();
             System.out.println("Connected using " + session.getProtocol() + " / " + session.getCipherSuite());
 
+            socket.setSoTimeout(RESPONSE_TIMEOUT_MILLIS);
+
             System.out.println("Step 3: Sending " + messageBytes.length + " bytes to host.");
             System.out.println(bytesToHex(messageBytes, messageBytes.length));
 
@@ -77,12 +86,17 @@ public class Iso8583Sender {
 
             System.out.println("Step 4: Waiting for host response.");
             byte[] buffer = new byte[1024];
-            int read = in.read(buffer);
-            if (read == -1) {
-                System.out.println("Step 5: No response received before the connection closed.");
-            } else {
-                System.out.println("Step 5: Received " + read + " bytes from host.");
-                System.out.println(bytesToHex(buffer, read));
+            try {
+                int read = in.read(buffer);
+                if (read == -1) {
+                    System.out.println("Step 5: No response received before the connection closed.");
+                } else {
+                    System.out.println("Step 5: Received " + read + " bytes from host.");
+                    System.out.println(bytesToHex(buffer, read));
+                }
+            } catch (SocketTimeoutException timeout) {
+                System.out.println("Step 5: No response received within " + RESPONSE_TIMEOUT_MILLIS
+                        + " ms; closing the connection.");
             }
         }
     }
@@ -94,6 +108,7 @@ public class Iso8583Sender {
             if (ENABLED_PROTOCOLS.length > 0) {
                 socket.setEnabledProtocols(ENABLED_PROTOCOLS);
             }
+            System.out.println("Performing TLS handshake...");
             socket.startHandshake();
             return socket;
         } catch (GeneralSecurityException e) {
@@ -152,6 +167,8 @@ public class Iso8583Sender {
             throw new IOException("No certificates were found inside "
                     + CUSTOM_CA_CERTIFICATE_LIST_PATH);
         }
+
+        System.out.println("Loaded " + index + " custom certificate(s) into the trust store.");
 
         trustManagerFactory.init(keyStore);
         context.init(null, trustManagerFactory.getTrustManagers(), new SecureRandom());

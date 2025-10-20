@@ -37,12 +37,17 @@ The ISO 8583 message is defined in `src/main/java/com/example/iso8583/Iso8583Sen
 
 If the remote endpoint only supports particular TLS protocol versions, adjust the `ENABLED_PROTOCOLS`
 constant in the same file (for example, set it to `{"TLSv1.2"}`) to avoid the server closing the
-connection during the handshake. Leaving the array empty retains the JVM defaults.
+connection during the handshake. Leaving the array empty retains the JVM defaults. The sender prints
+when the TLS handshake begins and reports the negotiated protocol and cipher after it succeeds.
 
 Trusted certificates can be stored in the `certificates.txt` file in the project root. The
 application loads the PEM blocks listed in this file automatically when establishing the TLS
-connection. The repository ships with the SecureTrust CA certificate as an example entry—replace it
-with the certificate(s) issued for your environment.
+connection and logs how many entries were imported. The repository ships with the SecureTrust CA
+certificate as an example entry—replace it with the certificate(s) issued for your environment.
+
+After the message is transmitted, the client waits up to 10 seconds for a response before timing out
+and closing the socket. Adjust the `RESPONSE_TIMEOUT_MILLIS` constant if your host requires a longer
+window to reply.
 
 After adjusting the constant if necessary, run the program either from the packaged JAR:
 
