@@ -1,6 +1,6 @@
 # ISO 8583 Socket Sender
 
-This repository contains a minimal Java 8 application that sends an ISO 8583 message, provided as a hexadecimal string, to the host `hostigor` on port `8056` over a TLS-encrypted socket.
+This repository contains a minimal Java 8 application that sends an ISO 8583 message, provided as a hexadecimal string, to the host `hostigor` on port `8056` over either a TLS-encrypted or plain TCP socket.
 
 ## Prerequisites
 
@@ -34,6 +34,8 @@ be copied straight to a Linux server and executed with `java -jar`.
 ## Running
 
 The ISO 8583 message is defined in `src/main/java/com/example/iso8583/Iso8583Sender.java` as the `HEX_MESSAGE` constant. Edit the constant to match the hexadecimal payload that should be transmitted.
+
+Set `USE_TLS` to `false` when the target endpoint expects an unencrypted TCP socket. When TLS is enabled (`USE_TLS = true`), the application performs the handshake and prints the negotiated protocol and cipher details; when disabled, it logs that a plain socket is being used and skips all certificate handling.
 
 If the remote endpoint only supports particular TLS protocol versions, adjust the `ENABLED_PROTOCOLS`
 constant in the same file (for example, set it to `{"TLSv1.2"}`) to avoid the server closing the

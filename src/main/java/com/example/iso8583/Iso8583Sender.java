@@ -6,6 +6,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -31,6 +32,12 @@ public class Iso8583Sender {
     // Replace the value below with the ISO 8583 message to send, encoded as hexadecimal characters.
     private static final String HEX_MESSAGE =
             "3030303030303030303030303030303030303030303030303030303030303030";
+
+    /**
+     * Toggle between TLS (true) and plain TCP (false) connections. When TLS is disabled the
+     * application skips all certificate handling and uses an unencrypted socket.
+     */
+    private static final boolean USE_TLS = true;
 
     /**
      * Path to a UTF-8 text file that contains one or more PEM-encoded certificates that should be
@@ -68,13 +75,21 @@ public class Iso8583Sender {
     }
 
     private static void sendMessage(byte[] messageBytes) throws IOException {
-        System.out.println("Step 2: Establishing TLS connection to " + HOST + ":" + PORT + ".");
-        try (SSLSocket socket = createSslSocket();
+        String connectionLabel = USE_TLS ? "TLS" : "TCP";
+        System.out.println(
+                "Step 2: Establishing " + connectionLabel + " connection to " + HOST + ":" + PORT + ".");
+        try (Socket socket = USE_TLS ? createSslSocket() : createTcpSocket();
              OutputStream out = new BufferedOutputStream(socket.getOutputStream());
              InputStream in = new BufferedInputStream(socket.getInputStream())) {
 
-            SSLSession session = socket.getSession();
-            System.out.println("Connected using " + session.getProtocol() + " / " + session.getCipherSuite());
+            if (USE_TLS) {
+                SSLSocket sslSocket = (SSLSocket) socket;
+                SSLSession session = sslSocket.getSession();
+                System.out.println(
+                        "Connected using " + session.getProtocol() + " / " + session.getCipherSuite());
+            } else {
+                System.out.println("Connected using plain TCP socket (no TLS encryption).");
+            }
 
             socket.setSoTimeout(RESPONSE_TIMEOUT_MILLIS);
 
@@ -114,6 +129,10 @@ public class Iso8583Sender {
         } catch (GeneralSecurityException e) {
             throw new IOException("Unable to initialize SSL context", e);
         }
+    }
+
+    private static Socket createTcpSocket() throws IOException {
+        return new Socket(HOST, PORT);
     }
 
     private static SSLSocketFactory createSslSocketFactory() throws GeneralSecurityException, IOException {
