@@ -17,6 +17,7 @@ import java.security.cert.X509Certificate;
 import java.util.Collection;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -125,17 +126,28 @@ public class Iso8583Sender {
                 SSLSession session = sslSocket.getSession();
                 System.out.println(
                         "Connected using " + session.getProtocol() + " / " + session.getCipherSuite());
+                byte[] sessionId = session.getId();
+                if (sessionId != null && sessionId.length > 0) {
+                    System.out.println("TLS session ID: " + bytesToHex(sessionId, sessionId.length));
+                }
+                try {
+                    System.out.println("Authenticated peer principal: " + session.getPeerPrincipal());
+                } catch (SSLPeerUnverifiedException e) {
+                    System.out.println("Peer principal not verified: " + e.getMessage());
+                }
             } else {
                 System.out.println("Connected using plain TCP socket (no TLS encryption).");
             }
 
             socket.setSoTimeout(RESPONSE_TIMEOUT_MILLIS);
 
-            System.out.println("Step 3: Sending " + messageBytes.length + " bytes to host.");
+            System.out.println("Step 3: Sending " + messageBytes.length
+                    + " bytes to host as a raw ISO 8583 message with no length prefix.");
             System.out.println(bytesToHex(messageBytes, messageBytes.length));
 
             out.write(messageBytes);
             out.flush();
+            System.out.println("Payload flushed to socket using direct ISO 8583 framing (no header).");
 
             System.out.println("Step 4: Waiting for host response.");
             byte[] buffer = new byte[1024];
@@ -162,8 +174,21 @@ public class Iso8583Sender {
             if (ENABLED_PROTOCOLS.length > 0) {
                 socket.setEnabledProtocols(ENABLED_PROTOCOLS);
             }
-            System.out.println("Performing TLS handshake...");
+            System.out.println("Performing TLS handshake with " + HOST + ":" + PORT + "...");
             socket.startHandshake();
+            SSLSession session = socket.getSession();
+            System.out.println("TLS handshake completed. Session established with peer host "
+                    + session.getPeerHost() + ".");
+            try {
+                if (session.getPeerCertificates().length > 0
+                        && session.getPeerCertificates()[0] instanceof X509Certificate) {
+                    X509Certificate leaf = (X509Certificate) session.getPeerCertificates()[0];
+                    System.out.println("Peer certificate subject: " + leaf.getSubjectX500Principal());
+                    System.out.println("Peer certificate issuer: " + leaf.getIssuerX500Principal());
+                }
+            } catch (SSLPeerUnverifiedException e) {
+                System.out.println("Peer did not present a verifiable certificate: " + e.getMessage());
+            }
             return socket;
         } catch (GeneralSecurityException e) {
             throw new IOException("Unable to initialize SSL context", e);
