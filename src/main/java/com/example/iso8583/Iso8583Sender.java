@@ -40,6 +40,18 @@ public class Iso8583Sender {
     private static final boolean USE_TLS = true;
 
     /**
+     * Toggle whether traffic should be routed through an HTTP CONNECT proxy. When enabled the
+     * program tunnels the TCP stream through the proxy before optionally starting the TLS handshake.
+     */
+    private static final boolean USE_PROXY = true;
+
+    /** Proxy host used when {@link #USE_PROXY} is enabled. */
+    private static final String PROXY_HOST = "12.12.44.3";
+
+    /** Proxy port used when {@link #USE_PROXY} is enabled. */
+    private static final int PROXY_PORT = 3128;
+
+    /**
      * Path to a UTF-8 text file that contains one or more PEM-encoded certificates that should be
      * trusted. Leave the string empty to use the default JVM trust store instead.
      */
@@ -76,8 +88,14 @@ public class Iso8583Sender {
 
     private static void sendMessage(byte[] messageBytes) throws IOException {
         String connectionLabel = USE_TLS ? "TLS" : "TCP";
-        System.out.println(
-                "Step 2: Establishing " + connectionLabel + " connection to " + HOST + ":" + PORT + ".");
+        if (USE_PROXY) {
+            System.out.println("Step 2: Establishing " + connectionLabel + " connection to " + HOST + ":"
+                    + PORT + " via proxy " + PROXY_HOST + ":" + PROXY_PORT + ".");
+        } else {
+            System.out.println("Step 2: Establishing " + connectionLabel + " connection to " + HOST + ":"
+                    + PORT + ".");
+        }
+
         try (Socket socket = USE_TLS ? createSslSocket() : createTcpSocket();
              OutputStream out = new BufferedOutputStream(socket.getOutputStream());
              InputStream in = new BufferedInputStream(socket.getInputStream())) {
@@ -119,7 +137,8 @@ public class Iso8583Sender {
     private static SSLSocket createSslSocket() throws IOException {
         try {
             SSLSocketFactory factory = createSslSocketFactory();
-            SSLSocket socket = (SSLSocket) factory.createSocket(HOST, PORT);
+            Socket baseSocket = createConnectedSocket();
+            SSLSocket socket = (SSLSocket) factory.createSocket(baseSocket, HOST, PORT, true);
             if (ENABLED_PROTOCOLS.length > 0) {
                 socket.setEnabledProtocols(ENABLED_PROTOCOLS);
             }
@@ -132,7 +151,92 @@ public class Iso8583Sender {
     }
 
     private static Socket createTcpSocket() throws IOException {
-        return new Socket(HOST, PORT);
+        return createConnectedSocket();
+    }
+
+    private static Socket createConnectedSocket() throws IOException {
+        if (!USE_PROXY) {
+            return new Socket(HOST, PORT);
+        }
+
+        System.out.println("Connecting to proxy " + PROXY_HOST + ":" + PROXY_PORT + "...");
+        Socket proxySocket = new Socket(PROXY_HOST, PROXY_PORT);
+        establishProxyTunnel(proxySocket);
+        return proxySocket;
+    }
+
+    private static void establishProxyTunnel(Socket proxySocket) throws IOException {
+        String connectRequest = "CONNECT " + HOST + ":" + PORT + " HTTP/1.1\r\n"
+                + "Host: " + HOST + ":" + PORT + "\r\n"
+                + "Connection: keep-alive\r\n\r\n";
+
+        OutputStream proxyOut = proxySocket.getOutputStream();
+        proxyOut.write(connectRequest.getBytes(StandardCharsets.ISO_8859_1));
+        proxyOut.flush();
+
+        InputStream proxyIn = proxySocket.getInputStream();
+
+        String responseLine = readProxyResponseLine(proxyIn);
+        if (!(responseLine.startsWith("HTTP/1.1 200") || responseLine.startsWith("HTTP/1.0 200"))) {
+            throw new IOException("Proxy CONNECT failed: " + responseLine);
+        }
+
+        // Drain the remaining headers until the blank line delimiter so the socket is ready for
+        // ISO 8583 payload traffic.
+        discardProxyHeaders(proxyIn);
+        System.out.println("Proxy tunnel established successfully.");
+    }
+
+    private static String readProxyResponseLine(InputStream in) throws IOException {
+        StringBuilder status = new StringBuilder();
+        int previous = -1;
+        int current;
+        while ((current = in.read()) != -1) {
+            if (current == '\n' && previous == '\r') {
+                status.setLength(status.length() - 1); // remove carriage return
+                break;
+            }
+            status.append((char) current);
+            previous = current;
+        }
+        if (status.length() == 0) {
+            throw new IOException("Empty response from proxy when establishing tunnel");
+        }
+        return status.toString();
+    }
+
+    private static void discardProxyHeaders(InputStream in) throws IOException {
+        int state = 0;
+        int b;
+        while ((b = in.read()) != -1) {
+            switch (state) {
+                case 0:
+                case 2:
+                    if (b == '\r') {
+                        state++;
+                    } else {
+                        state = 0;
+                    }
+                    break;
+                case 1:
+                    if (b == '\n') {
+                        state++;
+                    } else {
+                        state = 0;
+                    }
+                    break;
+                case 3:
+                    if (b == '\n') {
+                        return;
+                    } else {
+                        state = 0;
+                    }
+                    break;
+                default:
+                    throw new IllegalStateException("Unexpected state while discarding proxy headers");
+            }
+        }
+        throw new IOException("Unexpected end of stream while reading proxy response headers");
     }
 
     private static SSLSocketFactory createSslSocketFactory() throws GeneralSecurityException, IOException {

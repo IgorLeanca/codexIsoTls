@@ -37,6 +37,8 @@ The ISO 8583 message is defined in `src/main/java/com/example/iso8583/Iso8583Sen
 
 Set `USE_TLS` to `false` when the target endpoint expects an unencrypted TCP socket. When TLS is enabled (`USE_TLS = true`), the application performs the handshake and prints the negotiated protocol and cipher details; when disabled, it logs that a plain socket is being used and skips all certificate handling.
 
+To traverse a corporate proxy, enable the `USE_PROXY` flag and update `PROXY_HOST`/`PROXY_PORT` to the proxy's address. When proxying is active the sender first opens an HTTP CONNECT tunnel before proceeding with the TLS handshake or plain TCP session.
+
 If the remote endpoint only supports particular TLS protocol versions, adjust the `ENABLED_PROTOCOLS`
 constant in the same file (for example, set it to `{"TLSv1.2"}`) to avoid the server closing the
 connection during the handshake. Leaving the array empty retains the JVM defaults. The sender prints
@@ -63,7 +65,7 @@ or directly from the sources using Maven:
 mvn exec:java
 ```
 
-The program establishes a TLS session with `hostigor:8056`, sends the decoded bytes, and prints any response as a hexadecimal string.
+The program establishes a TLS or TCP session (directly or via the configured proxy) with `hostigor:8056`, sends the decoded bytes, and prints any response as a hexadecimal string.
 
 ### Trusting the server certificate
 
