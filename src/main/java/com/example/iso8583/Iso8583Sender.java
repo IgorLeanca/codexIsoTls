@@ -37,13 +37,13 @@ public class Iso8583Sender {
      * Toggle between TLS (true) and plain TCP (false) connections. When TLS is disabled the
      * application skips all certificate handling and uses an unencrypted socket.
      */
-    private static final boolean USE_TLS = true;
+    private static final boolean DEFAULT_USE_TLS = true;
 
     /**
      * Toggle whether traffic should be routed through an HTTP CONNECT proxy. When enabled the
      * program tunnels the TCP stream through the proxy before optionally starting the TLS handshake.
      */
-    private static final boolean USE_PROXY = true;
+    private static final boolean DEFAULT_USE_PROXY = true;
 
     /** Proxy host used when {@link #USE_PROXY} is enabled. */
     private static final String PROXY_HOST = "12.12.44.3";
@@ -76,7 +76,8 @@ public class Iso8583Sender {
             System.out.println("Step 1: Preparing ISO 8583 payload from configured hex string.");
             byte[] messageBytes = hexToBytes(HEX_MESSAGE);
             System.out.println("Hex payload length: " + messageBytes.length + " bytes.");
-            sendMessage(messageBytes);
+            RuntimeConfig config = RuntimeConfig.fromArgs(args);
+            sendMessage(messageBytes, config);
         } catch (IllegalArgumentException e) {
             System.err.println("Invalid hex message: " + e.getMessage());
             System.exit(1);
@@ -86,9 +87,9 @@ public class Iso8583Sender {
         }
     }
 
-    private static void sendMessage(byte[] messageBytes) throws IOException {
-        String connectionLabel = USE_TLS ? "TLS" : "TCP";
-        if (USE_PROXY) {
+    private static void sendMessage(byte[] messageBytes, RuntimeConfig config) throws IOException {
+        String connectionLabel = config.useTls ? "TLS" : "TCP";
+        if (config.useProxy) {
             System.out.println("Step 2: Establishing " + connectionLabel + " connection to " + HOST + ":"
                     + PORT + " via proxy " + PROXY_HOST + ":" + PROXY_PORT + ".");
         } else {
@@ -96,11 +97,11 @@ public class Iso8583Sender {
                     + PORT + ".");
         }
 
-        try (Socket socket = USE_TLS ? createSslSocket() : createTcpSocket();
+        try (Socket socket = config.useTls ? createSslSocket(config) : createTcpSocket(config);
              OutputStream out = new BufferedOutputStream(socket.getOutputStream());
              InputStream in = new BufferedInputStream(socket.getInputStream())) {
 
-            if (USE_TLS) {
+            if (config.useTls) {
                 SSLSocket sslSocket = (SSLSocket) socket;
                 SSLSession session = sslSocket.getSession();
                 System.out.println(
@@ -134,10 +135,10 @@ public class Iso8583Sender {
         }
     }
 
-    private static SSLSocket createSslSocket() throws IOException {
+    private static SSLSocket createSslSocket(RuntimeConfig config) throws IOException {
         try {
             SSLSocketFactory factory = createSslSocketFactory();
-            Socket baseSocket = createConnectedSocket();
+            Socket baseSocket = createConnectedSocket(config);
             SSLSocket socket = (SSLSocket) factory.createSocket(baseSocket, HOST, PORT, true);
             if (ENABLED_PROTOCOLS.length > 0) {
                 socket.setEnabledProtocols(ENABLED_PROTOCOLS);
@@ -150,12 +151,12 @@ public class Iso8583Sender {
         }
     }
 
-    private static Socket createTcpSocket() throws IOException {
-        return createConnectedSocket();
+    private static Socket createTcpSocket(RuntimeConfig config) throws IOException {
+        return createConnectedSocket(config);
     }
 
-    private static Socket createConnectedSocket() throws IOException {
-        if (!USE_PROXY) {
+    private static Socket createConnectedSocket(RuntimeConfig config) throws IOException {
+        if (!config.useProxy) {
             return new Socket(HOST, PORT);
         }
 
@@ -325,5 +326,58 @@ public class Iso8583Sender {
             sb.append(String.format("%02X", bytes[i] & 0xFF));
         }
         return sb.toString();
+    }
+
+    private static final class RuntimeConfig {
+        private final boolean useTls;
+        private final boolean useProxy;
+
+        private RuntimeConfig(boolean useTls, boolean useProxy) {
+            this.useTls = useTls;
+            this.useProxy = useProxy;
+        }
+
+        static RuntimeConfig fromArgs(String[] args) {
+            boolean useTls = DEFAULT_USE_TLS;
+            boolean useProxy = DEFAULT_USE_PROXY;
+
+            for (String arg : args) {
+                if ("--use-tls".equalsIgnoreCase(arg)) {
+                    useTls = true;
+                } else if ("--no-tls".equalsIgnoreCase(arg) || "--disable-tls".equalsIgnoreCase(arg)) {
+                    useTls = false;
+                } else if ("--use-proxy".equalsIgnoreCase(arg)) {
+                    useProxy = true;
+                } else if ("--no-proxy".equalsIgnoreCase(arg) || "--disable-proxy".equalsIgnoreCase(arg)) {
+                    useProxy = false;
+                } else if ("--help".equalsIgnoreCase(arg) || "-h".equalsIgnoreCase(arg)) {
+                    printUsageAndExit();
+                } else {
+                    System.err.println("Unrecognized argument: " + arg);
+                    printUsageAndExit();
+                }
+            }
+
+            if (!useTls) {
+                System.out.println("TLS disabled via command line; operating in plain TCP mode.");
+            }
+
+            if (!useProxy) {
+                System.out.println("Proxy disabled via command line; connecting directly to host.");
+            }
+
+            return new RuntimeConfig(useTls, useProxy);
+        }
+
+        private static void printUsageAndExit() {
+            System.out.println("Usage: java -jar iso8583-sender.jar [options]\n" +
+                    "Options:\n" +
+                    "  --use-tls            Force TLS mode (default).\n" +
+                    "  --no-tls             Disable TLS and use plain TCP.\n" +
+                    "  --use-proxy          Route the connection through the configured proxy (default).\n" +
+                    "  --no-proxy           Disable proxy usage and connect directly.\n" +
+                    "  --help               Show this help message.");
+            System.exit(0);
+        }
     }
 }

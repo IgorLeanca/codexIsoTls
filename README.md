@@ -35,9 +35,15 @@ be copied straight to a Linux server and executed with `java -jar`.
 
 The ISO 8583 message is defined in `src/main/java/com/example/iso8583/Iso8583Sender.java` as the `HEX_MESSAGE` constant. Edit the constant to match the hexadecimal payload that should be transmitted.
 
-Set `USE_TLS` to `false` when the target endpoint expects an unencrypted TCP socket. When TLS is enabled (`USE_TLS = true`), the application performs the handshake and prints the negotiated protocol and cipher details; when disabled, it logs that a plain socket is being used and skips all certificate handling.
+The binary defaults to TLS mode, but you can switch transports at launch time without recompiling:
 
-To traverse a corporate proxy, enable the `USE_PROXY` flag and update `PROXY_HOST`/`PROXY_PORT` to the proxy's address. When proxying is active the sender first opens an HTTP CONNECT tunnel before proceeding with the TLS handshake or plain TCP session.
+```
+java -jar target/iso8583-sender-1.0-SNAPSHOT.jar --no-tls
+```
+
+Passing `--no-tls` instructs the sender to use a plain TCP socket; omit the flag (or use `--use-tls`) to negotiate TLS and print the resulting protocol/cipher details.
+
+Proxy traversal can likewise be toggled per run. By default the sender opens an HTTP CONNECT tunnel through `12.12.44.3:3128` before contacting `hostigor:8056`. To override that behavior and connect directly, start the program with `--no-proxy`. Supplying `--use-proxy` re-enables the tunnel.
 
 If the remote endpoint only supports particular TLS protocol versions, adjust the `ENABLED_PROTOCOLS`
 constant in the same file (for example, set it to `{"TLSv1.2"}`) to avoid the server closing the
