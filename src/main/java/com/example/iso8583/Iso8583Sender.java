@@ -144,6 +144,7 @@ public class Iso8583Sender {
             System.out.println("Step 3: Sending " + messageBytes.length
                     + " bytes to host as a raw ISO 8583 message with no length prefix.");
             System.out.println(bytesToHex(messageBytes, messageBytes.length));
+            explainIso8583Framing(messageBytes.length);
 
             out.write(messageBytes);
             out.flush();
@@ -354,6 +355,18 @@ public class Iso8583Sender {
             sb.append(String.format("%02X", bytes[i] & 0xFF));
         }
         return sb.toString();
+    }
+
+    private static void explainIso8583Framing(int payloadLength) {
+        int highByte = (payloadLength >> 8) & 0xFF;
+        int lowByte = payloadLength & 0xFF;
+        System.out.println("ISO 8583 payload length: " + payloadLength + " bytes (0x"
+                + String.format("%04X", payloadLength) + ").");
+        System.out.println("A 2-byte big-endian length header would appear as: "
+                + String.format("%02X %02X", highByte, lowByte) + ".");
+        System.out.println(
+                "Many hosts either expect the sender to prepend that header or insert it themselves."
+                        + " For example, a 258-byte payload is advertised as '01 02'.");
     }
 
     private static final class RuntimeConfig {
