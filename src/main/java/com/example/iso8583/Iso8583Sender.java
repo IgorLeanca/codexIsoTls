@@ -9,18 +9,15 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Collection;
-import java.util.List;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -52,10 +49,33 @@ public class Iso8583Sender {
     private static final int PROXY_PORT = 3128;
 
     /**
-     * Path to a UTF-8 text file that contains one or more PEM-encoded certificates that should be
-     * trusted. Leave the string empty to use the default JVM trust store instead.
+     * PEM-encoded certificates that should be trusted in addition to the default JVM trust store.
+     * Leave the array empty to rely solely on the JVM defaults.
      */
-    private static final String CUSTOM_CA_CERTIFICATE_LIST_PATH = "certificates.txt";
+    private static final String[] CUSTOM_CA_CERTIFICATES = {
+            "-----BEGIN CERTIFICATE-----\n"
+                    + "MIIDuDCCAqCgAwIBAgIQDPCOXAgWpa1Cf/DrJxhZ0DANBgkqhkiG9w0BAQUFADBI\n"
+                    + "MQswCQYDVQQGEwJVUzEgMB4GA1UEChMXU2VjdXJlVHJ1c3QgQ29ycG9yYXRpb24x\n"
+                    + "FzAVBgNVBAMTDlNlY3VyZVRydXN0IENBMB4XDTA2MTEwNzE5MzExOFoXDTI5MTIz\n"
+                    + "MTE5NDA1NVowSDELMAkGA1UEBhMCVVMxIDAeBgNVBAoTF1NlY3VyZVRydXN0IENv\n"
+                    + "cnBvcmF0aW9uMRcwFQYDVQQDEw5TZWN1cmVUcnVzdCBDQTCCASIwDQYJKoZIhvcN\n"
+                    + "AQEBBQADggEPADCCAQoCggEBAKukgeWVzfX2FI7CT8rU4niVWJxB4Q2ZQCQXOZEz\n"
+                    + "Zum+4YOvYlyJ0fwkW2Gz4BERQRwdbvC4u/jep4G6pkjGnx29vo6pQT64lO0pGtSO\n"
+                    + "0gMdA+9tDWccV9cGrcrI9f4Or2YlSASWC12juhbDCE/RRvgUXPLIXgGZbf2IzIao\n"
+                    + "wW8xQmxSPmjL8xk037uHGFaAJsTQ3MBv396gwpEWoGQRS0S8Hvbn+mPeZqx2pHGj\n"
+                    + "7DaUaHp3pLHnDi+BeuK1cobvomuL8A/b01k/unK8RCSc43Oz969XL0Imnal0ugBS\n"
+                    + "8kvNU3xHCzaFDmapCJcWNFfBZveA4+1wVMeT4C4oFVmHursCAwEAAaOBnTCBmjAT\n"
+                    + "BgkrBgEEAYI3FAIEBh4EAEMAQTALBgNVHQ8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB\n"
+                    + "/zAdBgNVHQ4EFgQUQjK2FvoE/f5dS3rD/fdMQB1aQ68wNAYDVR0fBC0wKzApoCeg\n"
+                    + "JYYjaHR0cDovL2NybC5zZWN1cmV0cnVzdC5jb20vU1RDQS5jcmwwEAYJKwYBBAGC\n"
+                    + "NxUBBAMCAQAwDQYJKoZIhvcNAQEFBQADggEBADDtT0rhWDpSclu1pqNlGKa7UTt3\n"
+                    + "6Z3q059c4EVlew3KW+JwULKUBRSuSceNQQcSc5R+DCMh/bwQf2AQWnL1mA6s7Ll/\n"
+                    + "3XpvXdMc9P+IBWlCqQVxyLesJugutIxq/3HcuLHfmbx8IVQr5Fiiu1cprp6poxkm\n"
+                    + "D5kuCLDv/WnPmRoJjeOnnyvJNjR7JLN4TJUXpAYmHrZkUjZfYGfZnMUFdAvnZyPS\n"
+                    + "CPyI6a6Lf+Ew9Dd+/cYy2i2eRDAwbO4H3tI0/NL/QPZL9GZGBlSm8jIKYyYwa5vR\n"
+                    + "3ItHuuG51WLQoqD0ZwV4KWMabwTW+MZMo5qxN7SN5ShLHZ4swrhovO0C7jE=\n"
+                    + "-----END CERTIFICATE-----\n"
+    };
 
     /**
      * Some TLS servers immediately drop the connection when they see an unsupported protocol such as
@@ -106,17 +126,29 @@ public class Iso8583Sender {
                 SSLSession session = sslSocket.getSession();
                 System.out.println(
                         "Connected using " + session.getProtocol() + " / " + session.getCipherSuite());
+                byte[] sessionId = session.getId();
+                if (sessionId != null && sessionId.length > 0) {
+                    System.out.println("TLS session ID: " + bytesToHex(sessionId, sessionId.length));
+                }
+                try {
+                    System.out.println("Authenticated peer principal: " + session.getPeerPrincipal());
+                } catch (SSLPeerUnverifiedException e) {
+                    System.out.println("Peer principal not verified: " + e.getMessage());
+                }
             } else {
                 System.out.println("Connected using plain TCP socket (no TLS encryption).");
             }
 
             socket.setSoTimeout(RESPONSE_TIMEOUT_MILLIS);
 
-            System.out.println("Step 3: Sending " + messageBytes.length + " bytes to host.");
+            System.out.println("Step 3: Sending " + messageBytes.length
+                    + " bytes to host as a raw ISO 8583 message with no length prefix.");
             System.out.println(bytesToHex(messageBytes, messageBytes.length));
+            explainIso8583Framing(messageBytes.length);
 
             out.write(messageBytes);
             out.flush();
+            System.out.println("Payload flushed to socket using direct ISO 8583 framing (no header).");
 
             System.out.println("Step 4: Waiting for host response.");
             byte[] buffer = new byte[1024];
@@ -143,8 +175,21 @@ public class Iso8583Sender {
             if (ENABLED_PROTOCOLS.length > 0) {
                 socket.setEnabledProtocols(ENABLED_PROTOCOLS);
             }
-            System.out.println("Performing TLS handshake...");
+            System.out.println("Performing TLS handshake with " + HOST + ":" + PORT + "...");
             socket.startHandshake();
+            SSLSession session = socket.getSession();
+            System.out.println("TLS handshake completed. Session established with peer host "
+                    + session.getPeerHost() + ".");
+            try {
+                if (session.getPeerCertificates().length > 0
+                        && session.getPeerCertificates()[0] instanceof X509Certificate) {
+                    X509Certificate leaf = (X509Certificate) session.getPeerCertificates()[0];
+                    System.out.println("Peer certificate subject: " + leaf.getSubjectX500Principal());
+                    System.out.println("Peer certificate issuer: " + leaf.getIssuerX500Principal());
+                }
+            } catch (SSLPeerUnverifiedException e) {
+                System.out.println("Peer did not present a verifiable certificate: " + e.getMessage());
+            }
             return socket;
         } catch (GeneralSecurityException e) {
             throw new IOException("Unable to initialize SSL context", e);
@@ -241,7 +286,7 @@ public class Iso8583Sender {
     }
 
     private static SSLSocketFactory createSslSocketFactory() throws GeneralSecurityException, IOException {
-        if (CUSTOM_CA_CERTIFICATE_LIST_PATH.trim().isEmpty()) {
+        if (CUSTOM_CA_CERTIFICATES.length == 0) {
             return (SSLSocketFactory) SSLSocketFactory.getDefault();
         }
 
@@ -252,29 +297,14 @@ public class Iso8583Sender {
         keyStore.load(null, null);
 
         CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
-        Path certificateListPath = Paths.get(CUSTOM_CA_CERTIFICATE_LIST_PATH);
-        if (!Files.exists(certificateListPath)) {
-            throw new IOException(
-                    "Custom CA certificate list not found: " + CUSTOM_CA_CERTIFICATE_LIST_PATH);
+        System.out.println("Loading custom certificates from embedded configuration.");
+
+        String combinedCertificates = String.join("\n", CUSTOM_CA_CERTIFICATES);
+        if (!combinedCertificates.endsWith("\n")) {
+            combinedCertificates += "\n";
         }
 
-        System.out.println("Loading custom certificates from " + CUSTOM_CA_CERTIFICATE_LIST_PATH + ".");
-
-        List<String> lines = Files.readAllLines(certificateListPath, StandardCharsets.UTF_8);
-        StringBuilder normalizedCertificates = new StringBuilder();
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (trimmed.isEmpty() || trimmed.startsWith("#")) {
-                continue;
-            }
-            normalizedCertificates.append(trimmed).append('\n');
-        }
-
-        byte[] rawCertificates = normalizedCertificates.toString().getBytes(StandardCharsets.UTF_8);
-        if (rawCertificates.length == 0) {
-            throw new IOException("Custom CA certificate list is empty: "
-                    + CUSTOM_CA_CERTIFICATE_LIST_PATH);
-        }
+        byte[] rawCertificates = combinedCertificates.getBytes(StandardCharsets.UTF_8);
 
         int index = 0;
         try (InputStream certStream = new ByteArrayInputStream(rawCertificates)) {
@@ -288,8 +318,7 @@ public class Iso8583Sender {
         }
 
         if (index == 0) {
-            throw new IOException("No certificates were found inside "
-                    + CUSTOM_CA_CERTIFICATE_LIST_PATH);
+            throw new IOException("No certificates were found in the embedded configuration");
         }
 
         System.out.println("Loaded " + index + " custom certificate(s) into the trust store.");
@@ -326,6 +355,18 @@ public class Iso8583Sender {
             sb.append(String.format("%02X", bytes[i] & 0xFF));
         }
         return sb.toString();
+    }
+
+    private static void explainIso8583Framing(int payloadLength) {
+        int highByte = (payloadLength >> 8) & 0xFF;
+        int lowByte = payloadLength & 0xFF;
+        System.out.println("ISO 8583 payload length: " + payloadLength + " bytes (0x"
+                + String.format("%04X", payloadLength) + ").");
+        System.out.println("A 2-byte big-endian length header would appear as: "
+                + String.format("%02X %02X", highByte, lowByte) + ".");
+        System.out.println(
+                "Many hosts either expect the sender to prepend that header or insert it themselves."
+                        + " For example, a 258-byte payload is advertised as '01 02'.");
     }
 
     private static final class RuntimeConfig {
